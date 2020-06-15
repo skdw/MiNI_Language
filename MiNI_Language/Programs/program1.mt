@@ -1,0 +1,6 @@
+program
+	{
+	int a;
+	a = 3;
+	write a+1;
+	}
