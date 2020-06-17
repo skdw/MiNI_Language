@@ -28,17 +28,37 @@ namespace MiNI_Language
         }
     }
 
-    public class BlankNode : Node
+    public class BlockInstruction : Node
     {
-        public BlankNode()
+        public BlockInstruction()
         {
             Children = new List<Node>();
+        }
+
+        public BlockInstruction(List<Node> children)
+        {
+            Children = children;
         }
 
         public override void Accept(CodeGenerator visitor) => visitor.EmitBlock(this);
     }
 
-    public class RootNode : BlankNode
+    public class NoBlockInstruction : Node
+    {
+        public NoBlockInstruction()
+        {
+            Children = new List<Node>();
+        }
+
+        public NoBlockInstruction(List<Node> children)
+        {
+            Children = children;
+        }
+
+        public override void Accept(CodeGenerator visitor) => Children.ForEach(x => x.Accept(visitor));
+    }
+
+    public class RootNode : BlockInstruction
     {
         public override void Accept(CodeGenerator visitor) => visitor.Visit(this);
     }
@@ -61,23 +81,9 @@ namespace MiNI_Language
         {
             visitor.EmitCode(Val);
         }
+
+        public override string ToString() => Val;
     }
-
-    public class Declaration : Instruction
-    {
-        public string Type;
-
-        public Declaration(string val, string type) : base(val)
-        {
-            Type = type;
-        }
-
-        public override void Accept(CodeGenerator visitor)
-        {
-            visitor.EmitCode($".locals init({Type} {Val})");
-        }
-    }
-
 
     public class CodeGenerator
     {
@@ -87,13 +93,16 @@ namespace MiNI_Language
 
         private int indent_lvl = 0;
 
+        private readonly string file;
+
         public CodeGenerator(string file)
         {
-            sw = new StreamWriter(file + ".il");
+            this.file = file;
         }
 
         public void EmitCode(string instr)
         {
+            // Emits a line of code, indented with spaces
             sw.WriteLine($"{new string(' ', indent_lvl * indent_lines)}{instr}");
         }
 
@@ -108,6 +117,7 @@ namespace MiNI_Language
 
         public void Visit(RootNode rootNode)
         {
+            sw = new StreamWriter(file + ".il");
             EmitCode(".assembly extern mscorlib { }");
             EmitCode(".assembly minilanguage { }");
             EmitCode(".method static void main()");
@@ -168,7 +178,7 @@ namespace MiNI_Language
             lvl1.AddChild(program);
             lvl1.AddChild(new Instruction("catch [mscorlib]System.Exception"));
 
-            BlankNode lvl22 = new BlankNode();
+            BlockInstruction lvl22 = new BlockInstruction();
             lvl22.AddChild(new Instruction("callvirt instance string [mscorlib]System.Exception::get_Message()"));
             lvl22.AddChild(new Instruction("call void [mscorlib]System.Console::WriteLine(string)"));
             lvl22.AddChild(new Instruction("leave EndMain"));
@@ -194,6 +204,10 @@ namespace MiNI_Language
                 Program program = Compiler.Compile(file);
                 CodeGenerator codeGenerator = new CodeGenerator(file);
 
+                if(program is null)
+                {
+                    throw new Exception("There's no program to run!");
+                }
                 RootNode rootNode = GetRootNode(program);
                 rootNode.Accept(codeGenerator);
             }

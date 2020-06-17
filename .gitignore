@@ -263,3 +263,4 @@ __pycache__/
 /MiNI_Language/Parser.cs
 /MiNI_Language/kompilator.lst
 *.il
+*.exe

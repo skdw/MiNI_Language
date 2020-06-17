@@ -10,15 +10,16 @@
 
     public override void yyerror(string msg, params object[] args)
     {
-        string msg_text = String.Format("Line {0}: {1}", lineno, msg);
-        Console.Error.WriteLine(msg_text);
-	++Errors;
+        Console.Error.WriteLine("Line " + lineno + ": " + msg);
+        ++Errors;
     }
 %}
 
 Ident         ([a-zA-Z][a-zA-Z0-9]*)
 IntNumber     (0|[1-9][0-9]*)
 RealNumber    (0|[1-9][0-9]*)\.[0-9]+
+Comment       (\/\/.*\n)
+String        \"(.*)\"
 
 %%
 
@@ -26,10 +27,12 @@ RealNumber    (0|[1-9][0-9]*)\.[0-9]+
 "if"          { return (int)Tokens.If; }
 "else"        { return (int)Tokens.Else; }
 "while"       { return (int)Tokens.While; }
+"read"        { return (int)Tokens.Read; }
+"write"       { return (int)Tokens.Write; }
 "return"      { return (int)Tokens.Return; }
 "int"         { return (int)Tokens.Int; }
 "double"      { return (int)Tokens.Double; }
-"bool"	      { return (int)Tokens.Bool; }
+"bool"        { return (int)Tokens.Bool; }
 "true"        { return (int)Tokens.True; }
 "false"       { return (int)Tokens.False; }
 
@@ -61,6 +64,10 @@ RealNumber    (0|[1-9][0-9]*)\.[0-9]+
 <<EOF>>       { return (int)Tokens.EOF; }
 " "           { }
 "\t"          { }
+"\r"          { }
 {Ident}       { yylval.val=yytext; return (int)Tokens.Ident; }
 {IntNumber}   { yylval.val=yytext; return (int)Tokens.IntNumber; }
 {RealNumber}  { yylval.val=yytext; return (int)Tokens.RealNumber; }
+{String}      { yylval.val=yytext; return (int)Tokens.String; }
+{Comment}     { }
+.             { yyerror("Wrong token: " + yytext + "k"); return (int)Tokens.Error; }
