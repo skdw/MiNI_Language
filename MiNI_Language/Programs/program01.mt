@@ -9,4 +9,7 @@ program
 	write "dfgdfh";
 	//fliweufhe sd#$^&gerhgrt
 	write "abcde";
+	a = 3;
+	n = a = 5;
+	wynik = 15.78;
 	}

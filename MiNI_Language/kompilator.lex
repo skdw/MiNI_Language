@@ -18,7 +18,7 @@
 Ident         ([a-zA-Z][a-zA-Z0-9]*)
 IntNumber     (0|[1-9][0-9]*)
 RealNumber    (0|[1-9][0-9]*)\.[0-9]+
-Comment       (\/\/.*\n)
+Comment       \/\/.*$
 String        \"(.*)\"
 
 %%

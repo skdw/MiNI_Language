@@ -14,6 +14,9 @@ namespace MiNI_Language
 
         public List<Node> Children = null;
 
+        // typ zmiennej, jaka pozostaje na stosie
+        public string VarType = null; 
+
         public void AddChild(Node child)
         {
             try
@@ -58,7 +61,7 @@ namespace MiNI_Language
         public override void Accept(CodeGenerator visitor) => Children.ForEach(x => x.Accept(visitor));
     }
 
-    public class RootNode : BlockInstruction
+    public class RootNode : NoBlockInstruction
     {
         public override void Accept(CodeGenerator visitor) => visitor.Visit(this);
     }
@@ -118,10 +121,7 @@ namespace MiNI_Language
         public void Visit(RootNode rootNode)
         {
             sw = new StreamWriter(file + ".il");
-            EmitCode(".assembly extern mscorlib { }");
-            EmitCode(".assembly minilanguage { }");
-            EmitCode(".method static void main()");
-            EmitBlock(rootNode);
+            rootNode.Children.ForEach(x => x.Accept(this));
             sw.Close();
         }
     }
@@ -170,7 +170,12 @@ namespace MiNI_Language
         
         private static RootNode GetRootNode(Program program)
         {
-            RootNode lvl1 = new RootNode();
+            RootNode root = new RootNode();
+            root.AddChild(new Instruction(".assembly extern mscorlib { }"));
+            root.AddChild(new Instruction(".assembly minilanguage { }"));
+            root.AddChild(new Instruction(".method static void main()"));
+
+            BlockInstruction lvl1 = new BlockInstruction();
             lvl1.AddChild(new Instruction(".entrypoint"));
             lvl1.AddChild(new Instruction(".try"));
 
@@ -184,7 +189,8 @@ namespace MiNI_Language
             lvl22.AddChild(new Instruction("leave EndMain"));
             lvl1.AddChild(lvl22);
             lvl1.AddChild(new Instruction("EndMain: ret"));
-            return lvl1;
+            root.AddChild(lvl1);
+            return root;
         }
 
         public static int Main(string[] args)
