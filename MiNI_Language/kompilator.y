@@ -22,7 +22,6 @@
 
 %union // wszystkie mo¿liwe typy, jakie przenosi token
 {
-public int ind;
 public string val;
 public char type;
 public Node node;
@@ -38,11 +37,10 @@ public Instruction instrr;
 %token Eof Error
 %token <val> Ident IntNumber RealNumber String
 
-%type <ind> ident
 %type <nodelist> instructions declarations block
 %type <node> instruction declaration 
-%type <node> ifelse if while read write writestr return expr boolexpr unarexpr bool logicneg toint todouble anynumber
-%type <node> addchar mulchar logchar
+%type <node> ifelse if while read write writestr return expr unarexpr bool logicneg toint todouble anynumber stident ldident
+%type <node> addchar mulchar logchar eqchar compchar
 %type <node> op0 op1 op2 op3 op4 op5 op6 op7
 %type <val> datatype unarsub 
 
@@ -89,18 +87,19 @@ instruction : LeftCurlyBracket instructions RightCurlyBracket { $$ = new BlockIn
 exprinstr : expr Semicolon { }
           ;
 
-ifelse    : If LeftBracket boolexpr RightBracket instruction Else instruction { }
+ifelse    : If LeftBracket expr RightBracket instruction Else instruction { }
           ;
 
-if        : If LeftBracket boolexpr RightBracket instruction { }
+if        : If LeftBracket expr RightBracket instruction { }
           ;
 
-while     : While LeftBracket boolexpr RightBracket instruction { }
+while     : While LeftBracket expr RightBracket instruction { }
           ;
 
-read      : Read ident Semicolon { 
+read      : Read Ident Semicolon { 
+                                   int index = declarations.FindIndex(var => var.Item2 == String.Format("{0}", $2)); 
                                    var com1 = "call string [mscorlib]System.Console::ReadLine()"; 
-				   var com2 = String.Format("stloc {0}", $2); 
+				   var com2 = String.Format("stloc {0}", index); 
 				 }
           ;
 
@@ -133,9 +132,9 @@ return    : Return Semicolon { $$ = new Instruction("ret"); }
 expr      : op7 { $$ = $1; }
           ;
 
-op7       : ident Assignment op7 {
+op7       : stident Assignment op7 {
 	                                  var com1 = $3;
-					  var com2 = new Instruction(String.Format("stloc {0}", $1));
+					  var com2 = $1;
 					  var res = com1;
 					  if(com1.VarType != "assignment") // com1 nie jest jeszcze przypisaniem, nie trzeba duplikowaæ wartoœci
 					    res = new NoBlockInstruction(new List<Node> { com1, com2 });
@@ -161,7 +160,9 @@ op6       : op6 logchar op5 {
           | op5 { $$ = $1; }
           ;
 
-op5       : op4 { $$ = $1; }
+op5       : op5 eqchar op4 { $$ = new NoBlockInstruction(new List<Node> { $1, $3, $2 }, "bool"); }
+          | op5 compchar op4 { $$ = new NoBlockInstruction(new List<Node> { $1, $3, $2 }, "bool"); }
+          | op4 { $$ = $1; }
           ;
 
 op4       : op4 addchar op3 { 		   var nodelist = new List<Node> { $1 };
@@ -208,13 +209,16 @@ op0       : anynumber { $$ = $1; }
  //         | { $$ = new List<Node>(); }
  //         ;
 
-boolexpr  : logicneg { }
-          | relation { }
-          | logexpr { }
-	  ;
+//boolexpr  : logicneg { }
+        //  | relation { }
+        //  | logexpr { }
+//	  ;
 
-logexpr   : {}
-          ;
+//logexpr   : {}
+//          ;
+
+//relation  : {}
+ //         ;
 
 unarexpr  : unarsub { 
                       var com1 = new Instruction(String.Format("ldloc {0}", $1)); // ldc  - sta³a, ldloc - lokalna!!!!!
@@ -271,48 +275,55 @@ logchar   : LogicalOr { $$ = new Instruction("or"); }
           | LogicalAnd { $$ = new Instruction("and"); }
           ;
 
-relation  : equal { }
-          | notequal { }
-	  | greater { }
-	  | notless { }
-	  | less { }
-	  | notgreater { }
-	  ;
+eqchar    : Equality { $$ = new Instruction("ceq"); }
+          | Inequality { 
+	                 var ceq = new Instruction("ceq"); 
+			 var zero = new Instruction("ldc.i4.0"); 
+			 $$ = new NoBlockInstruction(new List<Node>{ ceq, zero, ceq }); 
+		       }
+	  ; // input int/double/2*bool, output bool
 
-equal     : anynumber Equality anynumber { } // input int/double/2*bool, output bool
-          ;
-
-notequal  : anynumber Inequality anynumber { } // input int/double/2*bool, output bool
-          ;
-
-greater   : anynumber Greater anynumber { } // input int/double, output bool
-          ;
-
-notless   : anynumber GreaterOrEqual anynumber { } // input int/double, output bool
-          ;
-
-less      : anynumber Less anynumber { } // input int/double, output bool
-          ;
-
-notgreater : anynumber LessOrEqual anynumber { } // input int/double, output bool
-          ;
+compchar  : Greater { $$ = new Instruction("cgt"); }
+          | GreaterOrEqual { 
+	                     var ceq = new Instruction("ceq"); 
+			     var clt = new Instruction("clt"); 
+			     var zero = new Instruction("ldc.i4.0"); 
+			     $$ = new NoBlockInstruction(new List<Node>{ clt, zero, ceq }); 
+			   }
+	  | Less { $$ = new Instruction("clt"); }
+          | LessOrEqual { 
+	                  var ceq = new Instruction("ceq"); 
+			  var cgt = new Instruction("cgt"); 
+			  var zero = new Instruction("ldc.i4.0"); 
+			  $$ = new NoBlockInstruction(new List<Node>{ cgt, zero, ceq }); 
+			}
+	  ; // input int/double, output bool
 
 anynumber : IntNumber { $$ = new Instruction(String.Format("ldc.i4 {0}", int.Parse($1)), "int32"); }
           | RealNumber { 
 	                 double d = double.Parse($1,System.Globalization.CultureInfo.InvariantCulture) ;
-                         var res = new Instruction(String.Format(System.Globalization.CultureInfo.InvariantCulture, "ldc.r8 {0}", d), "float64");
+                         var res = new Instruction(String.Format(System.Globalization.CultureInfo.InvariantCulture, "ldc.r8 {0:0.000000}", d), "float64");
 			 $$ = res;
 		       }
 	  | bool { $$ = $1; }
-	  | ident { $$ = new Instruction(String.Format("ldloc {0}", $1), declarations[$1].Item1); }
+	  | ldident { $$ = $1; }
 	  ; // wrzucamy wartosc na stos
-
-ident     : Ident { $$ = declarations.FindIndex(var => var.Item2 == String.Format("{0}", $1)); }
-	  ;
 
 bool      : True { $$ = new Instruction("ldc.i4.1", "bool"); }
           | False { $$ = new Instruction("ldc.i4.0", "bool"); }
 	  ; // wrzucamy wartosc na stos
+
+stident     : Ident { 
+                    int index = declarations.FindIndex(var => var.Item2 == String.Format("{0}", $1)); 
+		    $$ = new Instruction(String.Format("stloc {0}", index), declarations[index].Item1);
+		  }
+	  ; // wrzucamy wartosc zmiennej na stos
+
+ldident     : Ident { 
+                    int index = declarations.FindIndex(var => var.Item2 == String.Format("{0}", $1)); 
+		    $$ = new Instruction(String.Format("ldloc {0}", index), declarations[index].Item1);
+		  }
+	  ; // pobieramy wartosc ze stosu i umieszczamy w zmiennej
 %%
 
 
