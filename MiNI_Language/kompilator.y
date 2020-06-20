@@ -41,7 +41,9 @@ public Instruction instrr;
 %type <ind> ident
 %type <nodelist> instructions declarations block
 %type <node> instruction declaration 
-%type <node> ifelse if while read write writestr return expr boolexpr unarexpr bool logicneg toint todouble add assignment anynumber
+%type <node> ifelse if while read write writestr return expr boolexpr unarexpr bool logicneg toint todouble anynumber
+%type <node> addchar mulchar logchar
+%type <node> op0 op1 op2 op3 op4 op5 op6 op7
 %type <val> datatype unarsub 
 
 %%
@@ -109,8 +111,7 @@ write     : Write writestr Semicolon {
           ;
 
 writestr  : String { 
-                     var res = new Instruction(String.Format("ldstr {0}", $1)); 
-		     res.VarType = "string"; 
+                     var res = new Instruction(String.Format("ldstr {0}", $1), "string");
 		     $$ = res; 
 		   }
           | expr { $$ = $1; }
@@ -119,14 +120,89 @@ writestr  : String {
 return    : Return Semicolon { $$ = new Instruction("ret"); }
           ;
 
-expr      : unarexpr { } 
-          | bitexpr { }
-	  | mult { }
-	  | add { $$ = $1; }
-	  | relation { }
-	  | logical { }
-	  | assignment { }
+//expr      : unarexpr { } 
+//          | bitexpr { }
+//	  | mult { $$ = $1; }
+//	  | add { $$ = $1; }
+//	  | relation { }
+//	  | logical { }
+//	  | assignment { }
+//         ;
+
+
+expr      : op7 { $$ = $1; }
           ;
+
+op7       : ident Assignment op7 {
+	                                  var com1 = $3;
+					  var com2 = new Instruction(String.Format("stloc {0}", $1));
+					  var res = com1;
+					  if(com1.VarType != "assignment") // com1 nie jest jeszcze przypisaniem, nie trzeba duplikowaæ wartoœci
+					    res = new NoBlockInstruction(new List<Node> { com1, com2 });
+					  else
+					  {
+					    res.Children.Insert(res.Children.Count - 1, new Instruction("dup")); // powielamy wartosc na stosie
+					    res.Children.Add(com2);
+					  }
+					  res.VarType = "assignment";
+					  $$ = res;
+	                         } // stos pozostaje taki jak przed przypisaniem
+          | op6 { $$ = $1; }
+          ;
+
+op6       : op6 logchar op5 { 
+                              if($1.VarType == "bool" && $3.VarType == "bool") 
+			      {
+			        
+			      }
+			      else
+			        GenError("Both arguments have to be bool");
+                            } // output bool, obliczenia skrócone?
+          | op5 { $$ = $1; }
+          ;
+
+op5       : op4 { $$ = $1; }
+          ;
+
+op4       : op4 addchar op3 { 		   var nodelist = new List<Node> { $1 };
+					   string type = ($1.VarType == "int32" && $3.VarType == "int32") ? "int32" : "float64";
+					   if($1.VarType == "int32" && $3.VarType == "float64")
+					     nodelist.Add(new Instruction("conv.r8")); // konwersja na double
+					   nodelist.Add($3);
+					   if($1.VarType == "float64" && $3.VarType == "int32")
+					     nodelist.Add(new Instruction("conv.r8"));
+					   nodelist.Add($2);
+					   var res = new NoBlockInstruction(nodelist, type);
+					   $$ = res; 
+		            }
+          | op3 { $$ = $1; }
+	  ;
+
+op3       : op3 mulchar op2 {              var nodelist = new List<Node> { $1 };
+					   string type = ($1.VarType == "int32" && $3.VarType == "int32") ? "int32" : "float64";
+					   if($1.VarType == "int32" && $3.VarType == "float64")
+					     nodelist.Add(new Instruction("conv.r8")); // konwersja na double
+					   nodelist.Add($3);
+					   if($1.VarType == "float64" && $3.VarType == "int32")
+					     nodelist.Add(new Instruction("conv.r8"));
+					   nodelist.Add($2);
+					   var res = new NoBlockInstruction(nodelist, type);
+					   $$ = res; 
+			    }
+          | op2 { $$ = $1; }
+	  ;
+
+op2       : op1 { $$ = $1; }
+          ;
+
+op1       : op0 { $$ = $1; }
+          ;
+
+op0       : anynumber { $$ = $1; }
+          ;
+
+//relation  : add LeftBracket Equality RightBracket 
+//          ;
 
 //boolexprs : boolexprs boolexpr {  }
  //         | { $$ = new List<Node>(); }
@@ -134,8 +210,11 @@ expr      : unarexpr { }
 
 boolexpr  : logicneg { }
           | relation { }
-          | logical { }
+          | logexpr { }
 	  ;
+
+logexpr   : {}
+          ;
 
 unarexpr  : unarsub { 
                       var com1 = new Instruction(String.Format("ldloc {0}", $1)); // ldc  - sta³a, ldloc - lokalna!!!!!
@@ -179,24 +258,18 @@ bitexpr   : IntNumber BitwiseOr IntNumber { } // int
 	  | bitexpr BitwiseAnd IntNumber { }
 	  ;
 
-mult      : anynumber Multiplication anynumber { } // int, jeœli oba inty
-          | anynumber Division anynumber { }
-	  | mult Multiplication anynumber { }
-	  | mult Division anynumber { }
+
+mulchar   : Multiplication { $$ = new Instruction("mul"); }
+          | Division { $$ = new Instruction("div"); }
 	  ;
 
-add       : anynumber Addition anynumber { 
-                                           var com1 = $1; 
-					   var com2 = $3; 
-					   var com3 = new Instruction("add");
-					   var res = new NoBlockInstruction(new List<Node> { com1, com2, com3 }); 
-					   res.VarType = "int32"; // int, jeœli oba inty ???????
-					   $$ = res;
-					 } // pozostawia wynik na stosie; 
-          | anynumber Subtraction anynumber { }
-	  | add Addition anynumber { }
-	  | add Subtraction anynumber { }
+addchar   : Addition { $$ = new Instruction("add"); }
+          | Subtraction { $$ = new Instruction("sub"); }
 	  ;
+
+logchar   : LogicalOr { $$ = new Instruction("or"); } 
+          | LogicalAnd { $$ = new Instruction("and"); }
+          ;
 
 relation  : equal { }
           | notequal { }
@@ -224,42 +297,22 @@ less      : anynumber Less anynumber { } // input int/double, output bool
 notgreater : anynumber LessOrEqual anynumber { } // input int/double, output bool
           ;
 
-
-logical   : bool LogicalOr bool { } // output bool, obliczenia skrócone?
-          | bool LogicalAnd bool { }
-          ;
-
-assignment : ident Assignment anynumber { // lewym musi byæ zmienna, double=double/int, int/bool=ten sam typ
-                                          var com1 = $3; 
-					  var com2 = new Instruction(String.Format("stloc {0}", $1)); 
-					  $$ = new NoBlockInstruction(new List<Node> { com1, com2 }); 
-					} 
-          | ident Assignment assignment { 
-	                                  var res = $3; 
-					  res.Children.Insert(res.Children.Count - 1, new Instruction("dup")); // powielamy wartosc na stosie
-					  var com2 = new Instruction(String.Format("stloc {0}", $1)); 
-					  res.Children.Add(com2); 
-					  $$ = res; 
-					}
-          ; // stos pozostaje taki jak przed przypisaniem
-
-anynumber : IntNumber { $$ = new Instruction(String.Format("ldc.i4 {0}", int.Parse($1))); }
+anynumber : IntNumber { $$ = new Instruction(String.Format("ldc.i4 {0}", int.Parse($1)), "int32"); }
           | RealNumber { 
 	                 double d = double.Parse($1,System.Globalization.CultureInfo.InvariantCulture) ;
-                         $$ = new Instruction(String.Format(System.Globalization.CultureInfo.InvariantCulture, "ldc.r8 {0}", d)); 
+                         var res = new Instruction(String.Format(System.Globalization.CultureInfo.InvariantCulture, "ldc.r8 {0}", d), "float64");
+			 $$ = res;
 		       }
-	  | ident { $$ = new Instruction(String.Format("ldloc {0}", $1)); }
+	  | bool { $$ = $1; }
+	  | ident { $$ = new Instruction(String.Format("ldloc {0}", $1), declarations[$1].Item1); }
 	  ; // wrzucamy wartosc na stos
 
-ident     : Ident { 
-                    $$ = declarations.FindIndex(var => var.Item2 == String.Format("{0}", $1)); 
-		  }
+ident     : Ident { $$ = declarations.FindIndex(var => var.Item2 == String.Format("{0}", $1)); }
 	  ;
 
-bool      : True { $$ = new Instruction("ldc.i4.1"); }
-          | False { $$ = new Instruction("ldc.i4.0"); }
+bool      : True { $$ = new Instruction("ldc.i4.1", "bool"); }
+          | False { $$ = new Instruction("ldc.i4.0", "bool"); }
 	  ; // wrzucamy wartosc na stos
-
 %%
 
 

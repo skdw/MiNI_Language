@@ -58,6 +58,12 @@ namespace MiNI_Language
             Children = children;
         }
 
+        public NoBlockInstruction(List<Node> children, string vartype)
+        {
+            Children = children;
+            VarType = vartype;
+        }
+
         public override void Accept(CodeGenerator visitor) => Children.ForEach(x => x.Accept(visitor));
     }
 
@@ -78,6 +84,12 @@ namespace MiNI_Language
         public Instruction(string val)
         {
             Val = val;  
+        }
+
+        public Instruction(string val, string vartype)
+        {
+            Val = val;
+            VarType = vartype;
         }
 
         public override void Accept(CodeGenerator visitor)
