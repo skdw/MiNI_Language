@@ -12,7 +12,7 @@ namespace MiNI_Language
     {
         public abstract void Accept(CodeGenerator visitor);
 
-        public List<Node> Children = null;
+        public List<Node> Children = new List<Node>();
 
         // typ zmiennej, jaka pozostaje na stosie
         public string VarType = null; 
@@ -33,10 +33,7 @@ namespace MiNI_Language
 
     public class BlockInstruction : Node
     {
-        public BlockInstruction()
-        {
-            Children = new List<Node>();
-        }
+        public BlockInstruction() { }
 
         public BlockInstruction(List<Node> children)
         {
@@ -48,10 +45,7 @@ namespace MiNI_Language
 
     public class NoBlockInstruction : Node
     {
-        public NoBlockInstruction()
-        {
-            Children = new List<Node>();
-        }
+        public NoBlockInstruction() { }
 
         public NoBlockInstruction(List<Node> children)
         {
