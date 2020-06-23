@@ -15,7 +15,7 @@ namespace MiNI_Language
         public List<Node> Children = new List<Node>();
 
         // typ zmiennej, jaka pozostaje na stosie
-        public string VarType = null; 
+        public string VarType = null;
 
         public void AddChild(Node child)
         {
@@ -59,6 +59,13 @@ namespace MiNI_Language
         }
 
         public override void Accept(CodeGenerator visitor) => Children.ForEach(x => x.Accept(visitor));
+    }
+
+    public class Assignment : NoBlockInstruction
+    {
+        public Assignment(List<Node> children) : base(children) { }
+
+        public string AssignedType = "";
     }
 
     public class RootNode : NoBlockInstruction
@@ -136,7 +143,7 @@ namespace MiNI_Language
     {
         public static int errors = 0;
         
-        public static Program Compile(string file)
+        public static (int, Program) Compile(string file)
         {
             // Set a new FileStream for scanning
             var source = new FileStream(file, FileMode.Open);
@@ -149,6 +156,7 @@ namespace MiNI_Language
             source.Close();
 
             errors += scanner.Errors; // errors occured in scanner
+            errors += parser.Errors;
 
             if (errors == 0)
                 Console.WriteLine("compilation successful\n");
@@ -157,7 +165,7 @@ namespace MiNI_Language
                 Console.WriteLine($"\n  {errors} errors detected\n");
                 File.Delete(file + ".il");
             }
-            return parser.Program;
+            return (errors, parser.Program);
         }
     }
 
@@ -213,8 +221,11 @@ namespace MiNI_Language
             try
             {
                 Read(file);
-                Program program = Compiler.Compile(file);
+                (int errors, Program program) = Compiler.Compile(file);
                 CodeGenerator codeGenerator = new CodeGenerator(file);
+
+                if (errors > 0)
+                    return errors;
 
                 if(program is null)
                 {
