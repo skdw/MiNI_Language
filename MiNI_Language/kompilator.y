@@ -21,7 +21,7 @@
 
     private void GenError(string msg)
     {
-        Console.Error.WriteLine("Line " + scanner.lineno + ": " + msg);
+        Console.WriteLine("Line " + scanner.lineno + ": " + msg);
 	Errors++;
     }
 
@@ -62,7 +62,11 @@ public Node node;
 // nieterminal : terminale, które siê na niego sk³adaj¹ ;
 
 start     : Program block 
-               { Program = new Program(); Program.AddChild($2); }
+               { 
+	       Program = new Program(); 
+	       Program.AddChild($2); 
+	       Program.AddChild(new Instruction("IL_RETURN:\tnop")); 
+	       }
           ;
 
 block     : LeftCurlyBracket declars instrs RightCurlyBracket 
@@ -93,7 +97,7 @@ instrs    : instrs instr
 instr     : LeftCurlyBracket instrs RightCurlyBracket 
                { $$ = $2; }
           | expr Semicolon 
-	       { }
+	       { $$ = new NoBlockInstruction(new List<Node> { $1, new Instruction("pop") }); }
           | ifelse 
 	       { }
 	  | if 
@@ -114,14 +118,14 @@ ifelse    : If LeftBracket expr RightBracket instr Else instr
 	       string if1label = GetLabel();
 	       string if2label = GetLabel();
 	       var boolexpr = $3; 
-	       var beforeinstr = new Instruction(String.Format("brfalse.s {0}", if1label));
+	       var beforeinstr = new Instruction(String.Format("brfalse {0}", if1label));
 	       var ifinstr = $5;
-	       var after1instr = new Instruction(String.Format("br.s {0}", if2label));
-	       var betwinstr = new Instruction(String.Format("{0}:\t nop", if1label));
+	       var after1instr = new Instruction(String.Format("br {0}", if2label));
+	       var betwinstr = new Instruction(String.Format("{0}:\tnop", if1label));
 	       var elseinstr = $7;
-	       var after2instr = new Instruction(String.Format("{0}:\t nop", if2label));
+	       var after2instr = new Instruction(String.Format("{0}:\tnop", if2label));
 	       $$ = new NoBlockInstruction(new List<Node> {boolexpr, beforeinstr, ifinstr, after1instr, betwinstr, elseinstr, after2instr});
-	       }
+	       } // expr - wyrazenie boolowskie
           ;
 
 if        : If LeftBracket expr RightBracket instr 
@@ -129,35 +133,54 @@ if        : If LeftBracket expr RightBracket instr
 	       CheckType($3.VarType, "bool");
 	       string iflabel = GetLabel();
 	       var boolexpr = $3;
-	       var beforeinstr = new Instruction(String.Format("brfalse.s {0}", iflabel));
+	       var beforeinstr = new Instruction(String.Format("brfalse {0}", iflabel));
 	       var instr = $5;
-	       var afterinstr = new Instruction(String.Format("{0}:\t nop", iflabel));
+	       var afterinstr = new Instruction(String.Format("{0}:\tnop", iflabel));
 	       $$ = new NoBlockInstruction(new List<Node> {boolexpr, beforeinstr, instr, afterinstr});
-	       }
-          ; // expr musi zwracaæ boola
+	       } // expr - wyrazenie boolowskie
+          ; 
 
 while     : While LeftBracket expr RightBracket instr 
                {
 	       CheckType($3.VarType, "bool");
 	       string beforelabel = GetLabel();
 	       string exprlabel = GetLabel();
-	       var jumptoexpr = new Instruction(String.Format("br.s {0}", exprlabel));
-	       var markbefore = new Instruction(String.Format("{0}:\t nop", beforelabel));
+	       var jumptoexpr = new Instruction(String.Format("br {0}", exprlabel));
+	       var markbefore = new Instruction(String.Format("{0}:\tnop", beforelabel));
 	       var instr = $5;
-	       var markexpr = new Instruction(String.Format("{0}:\t nop", exprlabel));
+	       var markexpr = new Instruction(String.Format("{0}:\tnop", exprlabel));
 	       var expr = $3;
-	       var loopjump = new Instruction(String.Format("brtrue.s {0}", beforelabel));
+	       var loopjump = new Instruction(String.Format("brtrue {0}", beforelabel));
 	       $$ = new NoBlockInstruction(new List<Node> {jumptoexpr, markbefore, instr, markexpr, expr, loopjump});
-	       }
+	       } // expr - wyrazenie boolowskie
           ;
 
 read      : Read stident Semicolon
                {
 	       var com1 = new Instruction("call string [mscorlib]System.Console::ReadLine()");
-	       var com2 = $2;
-	       $$ = new NoBlockInstruction(new List<Node> {com1, com2});
+	       var res = new NoBlockInstruction(new List<Node> {com1});
+
+	       // rzutowania
+	       switch($2.VarType)
+	       {
+	       case "bool":
+	           res.AddChild(new Instruction("call bool [mscorlib]System.Boolean::Parse(string)"));
+	           break;
+	       case "int32":
+	           res.AddChild(new Instruction("call int32 [mscorlib]System.Int32::Parse(string)"));
+	           break;
+	       case "float64":
+	           res.AddChild(new Instruction("call class [mscorlib]System.Globalization.CultureInfo [mscorlib]System.Globalization.CultureInfo::get_InvariantCulture()"));
+		   res.AddChild(new Instruction("call float64 [mscorlib]System.Double::Parse(string, class [mscorlib]System.IFormatProvider)"));
+	           break;
+	       default:
+	           break;
 	       }
-          ; // zapisuje do zmiennej, nie zmienia stosu
+
+	       res.AddChild($2);
+	       $$ = res;
+	       } // zapisuje do zmiennej, nie zmienia stosu
+          ; 
 
 write     : Write writestr Semicolon 
                {
@@ -165,22 +188,16 @@ write     : Write writestr Semicolon
 	       var type = $2.VarType;
 	       if(type == "float64")
 	       {
-		   var conv1 = new Instruction("call class [mscorlib]System.Globalization.CultureInfo [mscorlib]System.Globalization.CultureInfo::get_InvariantCulture()");
-		   var conv2 = new Instruction("ldstr \"{0:0.000000}\"");
-		   var conv3 = $2;
-		   var conv4 = new Instruction("box [mscorlib]System.Double");
-		   var conv5 = new Instruction("call string [mscorlib]System.String::Format(class [mscorlib]System.IFormatProvider, string, object)");
-		   res.AddChild(conv1);
-		   res.AddChild(conv2);
-		   res.AddChild(conv3);
-		   res.AddChild(conv4);
-		   res.AddChild(conv5);
+		   res.AddChild(new Instruction("call class [mscorlib]System.Globalization.CultureInfo [mscorlib]System.Globalization.CultureInfo::get_InvariantCulture()"));
+		   res.AddChild(new Instruction("ldstr \"{0:0.000000}\""));
+		   res.AddChild($2);
+		   res.AddChild(new Instruction("box [mscorlib]System.Double"));
+		   res.AddChild(new Instruction("call string [mscorlib]System.String::Format(class [mscorlib]System.IFormatProvider, string, object)"));
 		   type = "string";
 	       }
 	       else
 	           res.AddChild($2);
-	       var com2 = new Instruction(String.Format("call void [mscorlib]System.Console::Write({0})", type));
-	       res.AddChild(com2);
+	       res.AddChild(new Instruction(String.Format("call void [mscorlib]System.Console::Write({0})", type)));
 	       $$ = res;
 	       } // pobiera napis ze stosu i wypisuje
           ;
@@ -192,33 +209,31 @@ writestr  : String
 	  ; // zostawia napis na stosie
 
 return    : Return Semicolon 
-               { $$ = new Instruction("ret"); }
+               { $$ = new Instruction("br IL_RETURN"); }
           ;
 
 expr      : stident Assignment expr 
                {
-	       var com1 = $3;
-	       var com2 = $1;
-	       bool isAssignment = com1.GetType().Name == "Assignment"; // sprawdza, czy przypisujemy wartosc z kolejnego przypisania
-	       string com1type = isAssignment ? (com1 as Assignment).AssignedType : com1.VarType; // typ przypisywanych danych
-	       if(com2.VarType == "float64")
-	           CheckType(com1type, "float64", "int");
-	       if(com2.VarType == "int32")
-	           CheckType(com1type, "int32");
-	       if(com2.VarType == "bool")
-	           CheckType(com1type, "bool");
-	       Assignment res;
-	       if(isAssignment == false) // wyrazenie com1 nie jest jeszcze przypisaniem, nie trzeba duplikowac wartosci
-	           res = new Assignment(new List<Node> { com1, com2 });
-	       else // wyrazenie com1 jest juz przypisaniem
-	           {
-		   res = new Assignment(com1.Children);
-	           res.Children.Insert(res.Children.Count - 1, new Instruction("dup")); // powielamy wartosc na stosie
-		   res.Children.Add(com2);
-	           }
-	       res.AssignedType = com2.VarType; // przypisany typ jest taki, jak typ zmiennej, ktora nadpisujemy
+	       // sprawdzamy przypisanie $3 do $1
+	       if($1.VarType == "float64")
+	           CheckType($3.VarType, "float64", "int32");
+	       if($1.VarType == "int32")
+	           CheckType($3.VarType, "int32");
+	       if($1.VarType == "bool")
+	           CheckType($3.VarType, "bool");
+	        
+	       // przypisany typ jest taki, jak typ zmiennej, ktora nadpisujemy
+	       var res = new NoBlockInstruction(new List<Node>() {$3}, $1.VarType);
+	       
+	       // konwersja w razie potrzeby
+	       if($3.VarType != "float64" && $1.VarType == "float64")
+	           res.AddChild(new Instruction("conv.r8"));
+
+	       // powielamy wartosc na stosie i zapisujemy w $1
+	       res.AddChild(new Instruction("dup"));
+	       res.AddChild($1);
 	       $$ = res;
-	       } // stos pozostaje taki jak przed przypisaniem
+	       } // na stos dok³adamy operacje przypisania, pozniej ewentualnie usuwa ja srednik
           | op6 
 	       { }
           ;
@@ -230,11 +245,11 @@ op6       : op6 LogicalOr op5
 	       var label1 = GetLabel();
 	       var label2 = GetLabel();
 	       var com1 = $1;
-	       var com2 = new Instruction(String.Format("brtrue.s {0}", label1)); // jesli com1 zwraca true, to nie liczymy juz com3 (wynik = true)
+	       var com2 = new Instruction(String.Format("brtrue {0}", label1)); // jesli com1 zwraca true, to nie liczymy juz com3 (wynik = true)
 	       var com3 = $3;
-	       var com4 = new Instruction(String.Format("br.s {0}", label2)); // jesli liczylismy com3, to przeskakujemy ponizsza linijke
-	       var com5 = new Instruction(String.Format("{0}:\t ldc.i4.1", label1)); // jesli nie liczylismy com3, to zwracamy true
-	       var com6 = new Instruction(String.Format("{0}:\t nop", label2)); // doszlismy do konca, na stosie lezy wynik
+	       var com4 = new Instruction(String.Format("br {0}", label2)); // jesli liczylismy com3, to przeskakujemy ponizsza linijke
+	       var com5 = new Instruction(String.Format("{0}:\tldc.i4.1", label1)); // jesli nie liczylismy com3, to zwracamy true
+	       var com6 = new Instruction(String.Format("{0}:\tnop", label2)); // doszlismy do konca, na stosie lezy wynik
 	       $$ = new NoBlockInstruction(new List<Node> { com1, com2, com3, com4, com5, com6 }, "bool"); 
 	       } // output bool, obliczenia skrocone
 	  | op6 LogicalAnd op5
@@ -244,11 +259,11 @@ op6       : op6 LogicalOr op5
 	       var label1 = GetLabel();
 	       var label2 = GetLabel();
 	       var com1 = $1;
-	       var com2 = new Instruction(String.Format("brfalse.s {0}", label1)); // jesli com1 zwraca false, to nie liczymy juz com3 (wynik = false)
+	       var com2 = new Instruction(String.Format("brfalse {0}", label1)); // jesli com1 zwraca false, to nie liczymy juz com3 (wynik = false)
 	       var com3 = $3;
-	       var com4 = new Instruction(String.Format("br.s {0}", label2)); // jesli liczylismy com3, to przeskakujemy ponizsza linijke
-	       var com5 = new Instruction(String.Format("{0}:\t ldc.i4.0", label1)); // jesli nie liczylismy com3, to zwracamy false
-	       var com6 = new Instruction(String.Format("{0}:\t nop", label2)); // doszlismy do konca, na stosie lezy wynik
+	       var com4 = new Instruction(String.Format("br {0}", label2)); // jesli liczylismy com3, to przeskakujemy ponizsza linijke
+	       var com5 = new Instruction(String.Format("{0}:\tldc.i4.0", label1)); // jesli nie liczylismy com3, to zwracamy false
+	       var com6 = new Instruction(String.Format("{0}:\tnop", label2)); // doszlismy do konca, na stosie lezy wynik
 	       $$ = new NoBlockInstruction(new List<Node> { com1, com2, com3, com4, com5, com6 }, "bool"); 
 	       } // output bool, obliczenia skrocone
           | op5 
@@ -257,15 +272,32 @@ op6       : op6 LogicalOr op5
 
 op5       : op5 eqchar op4 
                { 
-	       CheckType($1.VarType, "int32", "float64", "bool");
-	       CheckType($3.VarType, "int32", "float64", "bool");
-	       $$ = new NoBlockInstruction(new List<Node> { $1, $3, $2 }, "bool"); 
+	       var com1 = $1;
+	       var com3 = $3;
+	       if(com3.VarType == "bool")
+	           CheckType(com1.VarType, "bool");
+	       else
+	       {
+	       CheckType(com1.VarType, "int32", "float64");
+	       CheckType(com3.VarType, "int32", "float64");
+	       }
+	       if($1.VarType == "float64" && $3.VarType != "float64")
+	           com3 = new NoBlockInstruction(new List<Node> {com3, new Instruction("conv.r8")}, "float64");
+	       if($3.VarType == "float64" && $1.VarType != "float64")
+	           com1 = new NoBlockInstruction(new List<Node> {com1, new Instruction("conv.r8")}, "float64");
+	       $$ = new NoBlockInstruction(new List<Node> { com1, com3, $2 }, "bool"); 
 	       } // input int/double/bool, output bool
           | op5 compchar op4 
 	       {
+	       var com1 = $1;
+	       var com3 = $3;
 	       CheckType($1.VarType, "int32", "float64");
 	       CheckType($3.VarType, "int32", "float64");
-	       $$ = new NoBlockInstruction(new List<Node> { $1, $3, $2 }, "bool"); 
+	       if($1.VarType == "float64" && $3.VarType != "float64")
+	           com3 = new NoBlockInstruction(new List<Node> {com3, new Instruction("conv.r8")}, "float64");
+	       if($3.VarType == "float64" && $1.VarType != "float64")
+	           com1 = new NoBlockInstruction(new List<Node> {com1, new Instruction("conv.r8")}, "float64");
+	       $$ = new NoBlockInstruction(new List<Node> { com1, com3, $2 }, "bool"); 
 	       } // input int/double, output bool
           | op4 
 	       { }
@@ -283,8 +315,7 @@ op4       : op4 addchar op3
 	       if($1.VarType == "float64" && $3.VarType == "int32")
 	           nodelist.Add(new Instruction("conv.r8"));
 	       nodelist.Add($2);
-	       var res = new NoBlockInstruction(nodelist, type);
-	       $$ = res; 
+	       $$ = new NoBlockInstruction(nodelist, type);
 	       }
           | op3 
 	       { }
@@ -302,8 +333,7 @@ op3       : op3 mulchar op2
 	       if($1.VarType == "float64" && $3.VarType == "int32")
 	           nodelist.Add(new Instruction("conv.r8"));
 	       nodelist.Add($2);
-	       var res = new NoBlockInstruction(nodelist, type);
-	       $$ = res; 
+	       $$ = new NoBlockInstruction(nodelist, type);
 	       }
           | op2 
 	       { }
@@ -376,7 +406,7 @@ eqchar    : Equality
 	       var zero = new Instruction("ldc.i4.0");
 	       $$ = new NoBlockInstruction(new List<Node>{ ceq, zero, ceq });
 	       }
-	  ; // input int/double/2*bool, output bool
+	  ;
 
 compchar  : Greater 
                { $$ = new Instruction("cgt"); }
@@ -426,6 +456,11 @@ bool      : True
 stident   : Ident 
                {
 	       int index = declarations.FindIndex(var => var.Item2 == String.Format("{0}", $1));
+	       if(index == -1)
+	       {
+	           GenError(String.Format("Cannot access an undeclared variable: {0}", $1));
+		   YYAccept(); // ????????
+	       }
 	       $$ = new Instruction(String.Format("stloc {0}", index), declarations[index].Item1);
 	       }
 	  ; // pobieramy wartosc ze stosu i umieszczamy w zmiennej
@@ -433,6 +468,11 @@ stident   : Ident
 ldident   : Ident 
                {
 	       int index = declarations.FindIndex(var => var.Item2 == String.Format("{0}", $1));
+	       if(index == -1)
+	       {
+	           GenError(String.Format("Cannot put value to an undeclared variable: {0}", $1));
+		   YYAccept(); // ????????
+	       }
 	       $$ = new Instruction(String.Format("ldloc {0}", index), declarations[index].Item1);
 	       }
 	  ; // wrzucamy wartosc zmiennej na stos
@@ -445,6 +485,3 @@ datatype  : Int
 	       { $$ = "bool"; }
           ;
 %%
-
-
-// yyabort - koniec pliku!

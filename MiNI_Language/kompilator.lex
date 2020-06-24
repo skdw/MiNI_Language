@@ -10,7 +10,7 @@
 
     public override void yyerror(string msg, params object[] args)
     {
-        Console.Error.WriteLine("Line " + lineno + ": " + msg);
+        Console.WriteLine("Line " + lineno + ": " + msg);
         ++Errors;
     }
 %}
@@ -19,7 +19,7 @@ Ident         ([a-zA-Z][a-zA-Z0-9]*)
 IntNumber     (0|[1-9][0-9]*)
 RealNumber    (0|[1-9][0-9]*)\.[0-9]+
 Comment       \/\/.*$
-String        \"(.*)\"
+String        \"(\\.|[^"\n\\])*\"
 
 %%
 

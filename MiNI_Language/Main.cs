@@ -40,7 +40,9 @@ namespace MiNI_Language
             Children = children;
         }
 
-        public override void Accept(CodeGenerator visitor) => visitor.EmitBlock(this);
+        public bool Block = false;
+
+        public override void Accept(CodeGenerator visitor) => visitor.EmitBlock(this, true);
     }
 
     public class NoBlockInstruction : Node
@@ -58,16 +60,9 @@ namespace MiNI_Language
             VarType = vartype;
         }
 
-        public override void Accept(CodeGenerator visitor) => Children.ForEach(x => x.Accept(visitor));
+        public override void Accept(CodeGenerator visitor) => visitor.EmitBlock(this, false);
     }
-
-    public class Assignment : NoBlockInstruction
-    {
-        public Assignment(List<Node> children) : base(children) { }
-
-        public string AssignedType = "";
-    }
-
+    
     public class RootNode : NoBlockInstruction
     {
         public override void Accept(CodeGenerator visitor) => visitor.Visit(this);
@@ -75,7 +70,7 @@ namespace MiNI_Language
 
     public class Program : Node
     {
-        public override void Accept(CodeGenerator visitor) => visitor.EmitBlock(this);
+        public override void Accept(CodeGenerator visitor) => visitor.EmitBlock(this, true);
     }
 
     public class Instruction : Node
@@ -93,10 +88,7 @@ namespace MiNI_Language
             VarType = vartype;
         }
 
-        public override void Accept(CodeGenerator visitor)
-        {
-            visitor.EmitCode(Val);
-        }
+        public override void Accept(CodeGenerator visitor) => visitor.EmitCode(Val);
 
         public override string ToString() => Val;
     }
@@ -122,13 +114,19 @@ namespace MiNI_Language
             sw.WriteLine($"{new string(' ', indent_lvl * indent_lines)}{instr}");
         }
 
-        public void EmitBlock(Node node)
+        public void EmitBlock(Node node, bool block)
         {
-            EmitCode("{");
-            indent_lvl++;
+            if (block)
+            {
+                EmitCode("{");
+                indent_lvl++;
+            }
             node.Children.ForEach(x => x.Accept(this));
-            indent_lvl--;
-            EmitCode("}");
+            if(block)
+            {
+                indent_lvl--;
+                EmitCode("}");
+            }
         }
 
         public void Visit(RootNode rootNode)
@@ -159,10 +157,10 @@ namespace MiNI_Language
             errors += parser.Errors;
 
             if (errors == 0)
-                Console.WriteLine("compilation successful\n");
+                Console.WriteLine("Compilation successful!\n");
             else
             {
-                Console.WriteLine($"\n  {errors} errors detected\n");
+                Console.WriteLine($"Detected errors: {errors}\n");
                 File.Delete(file + ".il");
             }
             return (errors, parser.Program);
@@ -191,6 +189,7 @@ namespace MiNI_Language
 
             BlockInstruction lvl1 = new BlockInstruction();
             lvl1.AddChild(new Instruction(".entrypoint"));
+            lvl1.AddChild(new Instruction(".maxstack 256"));
             lvl1.AddChild(new Instruction(".try"));
 
             program.AddChild(new Instruction("leave EndMain"));
