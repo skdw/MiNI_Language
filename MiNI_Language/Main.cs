@@ -10,87 +10,55 @@ namespace MiNI_Language
 {
     public abstract class Node
     {
-        public abstract void Accept(CodeGenerator visitor);
+        public string VarType = null; // typ zmiennej, jaka pozostaje na stosie
 
-        public List<Node> Children = new List<Node>();
-
-        // typ zmiennej, jaka pozostaje na stosie
-        public string VarType = null;
-
-        public void AddChild(Node child)
-        {
-            try
-            {
-                Children.Add(child);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e.ToString());
-                throw;
-            }
-        }
-    }
-
-    public class BlockInstruction : Node
-    {
-        public BlockInstruction() { }
-
-        public BlockInstruction(List<Node> children)
-        {
-            Children = children;
-        }
-
-        public bool Block = false;
-
-        public override void Accept(CodeGenerator visitor) => visitor.EmitBlock(this, true);
-    }
-
-    public class NoBlockInstruction : Node
-    {
-        public NoBlockInstruction() { }
-
-        public NoBlockInstruction(List<Node> children)
-        {
-            Children = children;
-        }
-
-        public NoBlockInstruction(List<Node> children, string vartype)
-        {
-            Children = children;
-            VarType = vartype;
-        }
-
-        public override void Accept(CodeGenerator visitor) => visitor.EmitBlock(this, false);
-    }
-    
-    public class RootNode : NoBlockInstruction
-    {
-        public override void Accept(CodeGenerator visitor) => visitor.Visit(this);
-    }
-
-    public class Program : Node
-    {
-        public override void Accept(CodeGenerator visitor) => visitor.EmitBlock(this, true);
+        public abstract void Accept(CodeGenerator generator);
+        
+        public abstract void AddChild(Node child);
     }
 
     public class Instruction : Node
     {
         public string Val;
 
-        public Instruction(string val)
-        {
-            Val = val;  
-        }
-
-        public Instruction(string val, string vartype)
+        public Instruction(string val, string vartype = "")
         {
             Val = val;
             VarType = vartype;
         }
 
-        public override void Accept(CodeGenerator visitor) => visitor.EmitCode(Val);
+        public override void AddChild(Node child) => throw new Exception("Cannot add child to a single instruction");
+
+        public override void Accept(CodeGenerator generator) => generator.EmitCode(Val);
 
         public override string ToString() => Val;
+    }
+
+    public class ParentNode : Node
+    {
+        public bool Block = false;
+
+        public List<Node> Children = new List<Node>();
+
+        public ParentNode(bool block = false)
+        {
+            Block = block;
+        }
+
+        public ParentNode(List<Node> children, string vartype = "")
+        {
+            Children = children;
+            VarType = vartype;
+        }
+        
+        public override void AddChild(Node child) => Children.Add(child);
+        
+        public override void Accept(CodeGenerator generator) => generator.EmitNode(this, Block);
+    }
+    
+    public class RootNode : ParentNode
+    {
+        public override void Accept(CodeGenerator generator) => generator.EmitRoot(this);
     }
 
     public class CodeGenerator
@@ -114,7 +82,7 @@ namespace MiNI_Language
             sw.WriteLine($"{new string(' ', indent_lvl * indent_lines)}{instr}");
         }
 
-        public void EmitBlock(Node node, bool block)
+        public void EmitNode(ParentNode node, bool block)
         {
             if (block)
             {
@@ -122,14 +90,14 @@ namespace MiNI_Language
                 indent_lvl++;
             }
             node.Children.ForEach(x => x.Accept(this));
-            if(block)
+            if (block)
             {
                 indent_lvl--;
                 EmitCode("}");
             }
         }
 
-        public void Visit(RootNode rootNode)
+        public void EmitRoot(RootNode rootNode)
         {
             sw = new StreamWriter(file + ".il");
             rootNode.Children.ForEach(x => x.Accept(this));
@@ -141,7 +109,7 @@ namespace MiNI_Language
     {
         public static int errors = 0;
         
-        public static (int, Program) Compile(string file)
+        public static (int, ParentNode) Compile(string file)
         {
             // Set a new FileStream for scanning
             var source = new FileStream(file, FileMode.Open);
@@ -180,14 +148,14 @@ namespace MiNI_Language
             source = new List<string>(str.Split(new string[] { "\r\n" }, StringSplitOptions.None));
         }
         
-        private static RootNode GetRootNode(Program program)
+        private static RootNode GetRootNode(ParentNode program)
         {
             RootNode root = new RootNode();
             root.AddChild(new Instruction(".assembly extern mscorlib { }"));
             root.AddChild(new Instruction(".assembly minilanguage { }"));
             root.AddChild(new Instruction(".method static void main()"));
 
-            BlockInstruction lvl1 = new BlockInstruction();
+            ParentNode lvl1 = new ParentNode(true);
             lvl1.AddChild(new Instruction(".entrypoint"));
             lvl1.AddChild(new Instruction(".maxstack 256"));
             lvl1.AddChild(new Instruction(".try"));
@@ -196,7 +164,7 @@ namespace MiNI_Language
             lvl1.AddChild(program);
             lvl1.AddChild(new Instruction("catch [mscorlib]System.Exception"));
 
-            BlockInstruction lvl22 = new BlockInstruction();
+            ParentNode lvl22 = new ParentNode(true);
             lvl22.AddChild(new Instruction("callvirt instance string [mscorlib]System.Exception::get_Message()"));
             lvl22.AddChild(new Instruction("call void [mscorlib]System.Console::WriteLine(string)"));
             lvl22.AddChild(new Instruction("leave EndMain"));
@@ -220,7 +188,7 @@ namespace MiNI_Language
             try
             {
                 Read(file);
-                (int errors, Program program) = Compiler.Compile(file);
+                (int errors, ParentNode program) = Compiler.Compile(file);
                 CodeGenerator codeGenerator = new CodeGenerator(file);
 
                 if (errors > 0)

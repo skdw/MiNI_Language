@@ -5,7 +5,7 @@
 %{
     private Scanner scanner;
 
-    public Program Program { get; private set; }
+    public ParentNode Program { get; private set; }
 
     private List<(string, string)> declarations;
 
@@ -63,20 +63,20 @@ public Node node;
 
 start     : Program block 
                { 
-	       Program = new Program(); 
+	       Program = new ParentNode(true); 
 	       Program.AddChild($2); 
 	       Program.AddChild(new Instruction("IL_RETURN:\tnop")); 
 	       }
           ;
 
 block     : LeftCurlyBracket declars instrs RightCurlyBracket 
-               { $$ = new NoBlockInstruction(new List<Node>{ $2, $3 }); }
+               { $$ = new ParentNode(new List<Node>{ $2, $3 }); }
           ;
 
 declars   : declars declar
                { $1.AddChild($2); }
           |    
-	       { $$ = new NoBlockInstruction(); }
+	       { $$ = new ParentNode(); }
           ;
 
 declar    : datatype Ident Semicolon 
@@ -91,13 +91,13 @@ declar    : datatype Ident Semicolon
 instrs    : instrs instr 
                { $1.AddChild($2); }
           |    
-	       { $$ = new NoBlockInstruction(); }
+	       { $$ = new ParentNode(); }
           ;
 
 instr     : LeftCurlyBracket instrs RightCurlyBracket 
                { $$ = $2; }
           | expr Semicolon 
-	       { $$ = new NoBlockInstruction(new List<Node> { $1, new Instruction("pop") }); }
+	       { $$ = new ParentNode(new List<Node> { $1, new Instruction("pop") }); }
           | ifelse 
 	       { }
 	  | if 
@@ -124,7 +124,7 @@ ifelse    : If LeftBracket expr RightBracket instr Else instr
 	       var betwinstr = new Instruction(String.Format("{0}:\tnop", if1label));
 	       var elseinstr = $7;
 	       var after2instr = new Instruction(String.Format("{0}:\tnop", if2label));
-	       $$ = new NoBlockInstruction(new List<Node> {boolexpr, beforeinstr, ifinstr, after1instr, betwinstr, elseinstr, after2instr});
+	       $$ = new ParentNode(new List<Node> {boolexpr, beforeinstr, ifinstr, after1instr, betwinstr, elseinstr, after2instr});
 	       } // expr - wyrazenie boolowskie
           ;
 
@@ -136,7 +136,7 @@ if        : If LeftBracket expr RightBracket instr
 	       var beforeinstr = new Instruction(String.Format("brfalse {0}", iflabel));
 	       var instr = $5;
 	       var afterinstr = new Instruction(String.Format("{0}:\tnop", iflabel));
-	       $$ = new NoBlockInstruction(new List<Node> {boolexpr, beforeinstr, instr, afterinstr});
+	       $$ = new ParentNode(new List<Node> {boolexpr, beforeinstr, instr, afterinstr});
 	       } // expr - wyrazenie boolowskie
           ; 
 
@@ -151,14 +151,14 @@ while     : While LeftBracket expr RightBracket instr
 	       var markexpr = new Instruction(String.Format("{0}:\tnop", exprlabel));
 	       var expr = $3;
 	       var loopjump = new Instruction(String.Format("brtrue {0}", beforelabel));
-	       $$ = new NoBlockInstruction(new List<Node> {jumptoexpr, markbefore, instr, markexpr, expr, loopjump});
+	       $$ = new ParentNode(new List<Node> {jumptoexpr, markbefore, instr, markexpr, expr, loopjump});
 	       } // expr - wyrazenie boolowskie
           ;
 
 read      : Read stident Semicolon
                {
 	       var com1 = new Instruction("call string [mscorlib]System.Console::ReadLine()");
-	       var res = new NoBlockInstruction(new List<Node> {com1});
+	       var res = new ParentNode(new List<Node> {com1});
 
 	       // rzutowania
 	       switch($2.VarType)
@@ -184,7 +184,7 @@ read      : Read stident Semicolon
 
 write     : Write writestr Semicolon 
                {
-	       var res = new NoBlockInstruction();
+	       var res = new ParentNode();
 	       var type = $2.VarType;
 	       if(type == "float64")
 	       {
@@ -223,7 +223,7 @@ expr      : stident Assignment expr
 	           CheckType($3.VarType, "bool");
 	        
 	       // przypisany typ jest taki, jak typ zmiennej, ktora nadpisujemy
-	       var res = new NoBlockInstruction(new List<Node>() {$3}, $1.VarType);
+	       var res = new ParentNode(new List<Node>() {$3}, $1.VarType);
 	       
 	       // konwersja w razie potrzeby
 	       if($3.VarType != "float64" && $1.VarType == "float64")
@@ -250,7 +250,7 @@ op6       : op6 LogicalOr op5
 	       var com4 = new Instruction(String.Format("br {0}", label2)); // jesli liczylismy com3, to przeskakujemy ponizsza linijke
 	       var com5 = new Instruction(String.Format("{0}:\tldc.i4.1", label1)); // jesli nie liczylismy com3, to zwracamy true
 	       var com6 = new Instruction(String.Format("{0}:\tnop", label2)); // doszlismy do konca, na stosie lezy wynik
-	       $$ = new NoBlockInstruction(new List<Node> { com1, com2, com3, com4, com5, com6 }, "bool"); 
+	       $$ = new ParentNode(new List<Node> { com1, com2, com3, com4, com5, com6 }, "bool"); 
 	       } // output bool, obliczenia skrocone
 	  | op6 LogicalAnd op5
 	       {
@@ -264,7 +264,7 @@ op6       : op6 LogicalOr op5
 	       var com4 = new Instruction(String.Format("br {0}", label2)); // jesli liczylismy com3, to przeskakujemy ponizsza linijke
 	       var com5 = new Instruction(String.Format("{0}:\tldc.i4.0", label1)); // jesli nie liczylismy com3, to zwracamy false
 	       var com6 = new Instruction(String.Format("{0}:\tnop", label2)); // doszlismy do konca, na stosie lezy wynik
-	       $$ = new NoBlockInstruction(new List<Node> { com1, com2, com3, com4, com5, com6 }, "bool"); 
+	       $$ = new ParentNode(new List<Node> { com1, com2, com3, com4, com5, com6 }, "bool"); 
 	       } // output bool, obliczenia skrocone
           | op5 
 	       { }
@@ -282,10 +282,10 @@ op5       : op5 eqchar op4
 	       CheckType(com3.VarType, "int32", "float64");
 	       }
 	       if($1.VarType == "float64" && $3.VarType != "float64")
-	           com3 = new NoBlockInstruction(new List<Node> {com3, new Instruction("conv.r8")}, "float64");
+	           com3 = new ParentNode(new List<Node> {com3, new Instruction("conv.r8")}, "float64");
 	       if($3.VarType == "float64" && $1.VarType != "float64")
-	           com1 = new NoBlockInstruction(new List<Node> {com1, new Instruction("conv.r8")}, "float64");
-	       $$ = new NoBlockInstruction(new List<Node> { com1, com3, $2 }, "bool"); 
+	           com1 = new ParentNode(new List<Node> {com1, new Instruction("conv.r8")}, "float64");
+	       $$ = new ParentNode(new List<Node> { com1, com3, $2 }, "bool"); 
 	       } // input int/double/bool, output bool
           | op5 compchar op4 
 	       {
@@ -294,10 +294,10 @@ op5       : op5 eqchar op4
 	       CheckType($1.VarType, "int32", "float64");
 	       CheckType($3.VarType, "int32", "float64");
 	       if($1.VarType == "float64" && $3.VarType != "float64")
-	           com3 = new NoBlockInstruction(new List<Node> {com3, new Instruction("conv.r8")}, "float64");
+	           com3 = new ParentNode(new List<Node> {com3, new Instruction("conv.r8")}, "float64");
 	       if($3.VarType == "float64" && $1.VarType != "float64")
-	           com1 = new NoBlockInstruction(new List<Node> {com1, new Instruction("conv.r8")}, "float64");
-	       $$ = new NoBlockInstruction(new List<Node> { com1, com3, $2 }, "bool"); 
+	           com1 = new ParentNode(new List<Node> {com1, new Instruction("conv.r8")}, "float64");
+	       $$ = new ParentNode(new List<Node> { com1, com3, $2 }, "bool"); 
 	       } // input int/double, output bool
           | op4 
 	       { }
@@ -315,7 +315,7 @@ op4       : op4 addchar op3
 	       if($1.VarType == "float64" && $3.VarType == "int32")
 	           nodelist.Add(new Instruction("conv.r8"));
 	       nodelist.Add($2);
-	       $$ = new NoBlockInstruction(nodelist, type);
+	       $$ = new ParentNode(nodelist, type);
 	       }
           | op3 
 	       { }
@@ -333,7 +333,7 @@ op3       : op3 mulchar op2
 	       if($1.VarType == "float64" && $3.VarType == "int32")
 	           nodelist.Add(new Instruction("conv.r8"));
 	       nodelist.Add($2);
-	       $$ = new NoBlockInstruction(nodelist, type);
+	       $$ = new ParentNode(nodelist, type);
 	       }
           | op2 
 	       { }
@@ -343,7 +343,7 @@ op2       : op2 bitchar op1
                { 
 	       CheckType($1.VarType, "int32");
 	       CheckType($3.VarType, "int32");
-	       $$ = new NoBlockInstruction(new List<Node> { $1, $3, $2 }, "int32"); 
+	       $$ = new ParentNode(new List<Node> { $1, $3, $2 }, "int32"); 
 	       }
           | op1 
 	       { }
@@ -353,22 +353,22 @@ op1       : Subtraction op1
                { 
 	       var com1 = new Instruction("neg");
 	       CheckType($2.VarType, "int32", "float64");
-	       $$ = new NoBlockInstruction(new List<Node> { $2, com1 }, $2.VarType);
+	       $$ = new ParentNode(new List<Node> { $2, com1 }, $2.VarType);
 	       }
 	  | BitwiseNegation op1 
 	       {
 	       var com1 = new Instruction("not");
 	       CheckType($2.VarType, "int32");
-	       $$ = new NoBlockInstruction(new List<Node> { $2, com1 }, $2.VarType);
+	       $$ = new ParentNode(new List<Node> { $2, com1 }, $2.VarType);
 	       }
           | convchar op1 
-	       { $$ = new NoBlockInstruction(new List<Node> { $2, $1 }, $1.VarType); } 
+	       { $$ = new ParentNode(new List<Node> { $2, $1 }, $1.VarType); } 
 	  | LogicalNegation op1 
 	       {
 	       var com2 = new Instruction("ldc.i4.0", "bool");
 	       var com3 = new Instruction("ceq");
 	       CheckType($2.VarType, "bool");
-	       $$ = new NoBlockInstruction(new List<Node> { $2, com2, com3 }, $2.VarType);
+	       $$ = new ParentNode(new List<Node> { $2, com2, com3 }, $2.VarType);
 	       }
           | op0 
 	       { }
@@ -404,7 +404,7 @@ eqchar    : Equality
 	       {
 	       var ceq = new Instruction("ceq");
 	       var zero = new Instruction("ldc.i4.0");
-	       $$ = new NoBlockInstruction(new List<Node>{ ceq, zero, ceq });
+	       $$ = new ParentNode(new List<Node>{ ceq, zero, ceq });
 	       }
 	  ;
 
@@ -415,7 +415,7 @@ compchar  : Greater
 	       var ceq = new Instruction("ceq");
 	       var clt = new Instruction("clt");
 	       var zero = new Instruction("ldc.i4.0");
-	       $$ = new NoBlockInstruction(new List<Node>{ clt, zero, ceq });
+	       $$ = new ParentNode(new List<Node>{ clt, zero, ceq });
 	       }
 	  | Less 
 	       { $$ = new Instruction("clt"); }
@@ -424,7 +424,7 @@ compchar  : Greater
 	       var ceq = new Instruction("ceq");
 	       var cgt = new Instruction("cgt");
 	       var zero = new Instruction("ldc.i4.0");
-	       $$ = new NoBlockInstruction(new List<Node>{ cgt, zero, ceq });
+	       $$ = new ParentNode(new List<Node>{ cgt, zero, ceq });
 	       }
 	  ; 
 
