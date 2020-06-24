@@ -40,7 +40,6 @@
 %union // wszystkie mo¿liwe typy, jakie przenosi token
 {
 public string val;
-public char type;
 public Node node;
 }
 
