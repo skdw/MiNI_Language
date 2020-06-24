@@ -45,7 +45,7 @@ namespace MiNI_Language
             Block = block;
         }
 
-        public ParentNode(List<Node> children, string vartype = "")
+        public ParentNode(List<Node> children, string vartype = null)
         {
             Children = children;
             VarType = vartype;
@@ -54,6 +54,8 @@ namespace MiNI_Language
         public override void AddChild(Node child) => Children.Add(child);
         
         public override void Accept(CodeGenerator generator) => generator.EmitNode(this, Block);
+
+        public override string ToString() => VarType == null ? "ParentNode: null" : $"ParentNode: {VarType}";
     }
     
     public class RootNode : ParentNode
@@ -116,19 +118,18 @@ namespace MiNI_Language
 
             Scanner scanner = new Scanner(source);
             Parser parser = new Parser(scanner);
-
             parser.Parse();
 
             source.Close();
 
-            errors += scanner.Errors; // errors occured in scanner
+            errors += scanner.Errors;
             errors += parser.Errors;
 
             if (errors == 0)
-                Console.WriteLine("Compilation successful!\n");
+                Console.WriteLine("Compilation successful!");
             else
             {
-                Console.WriteLine($"Detected errors: {errors}\n");
+                Console.WriteLine($"Detected errors: {errors}");
                 File.Delete(file + ".il");
             }
             return (errors, parser.Program);
@@ -137,17 +138,6 @@ namespace MiNI_Language
 
     public class MainCompiler
     {
-        public static List<string> source;
-
-        static void Read(string file)
-        {
-            // Read lines from file
-            var sr = new StreamReader(file);
-            string str = sr.ReadToEnd();
-            sr.Close();
-            source = new List<string>(str.Split(new string[] { "\r\n" }, StringSplitOptions.None));
-        }
-        
         private static RootNode GetRootNode(ParentNode program)
         {
             RootNode root = new RootNode();
@@ -177,27 +167,24 @@ namespace MiNI_Language
         public static int Main(string[] args)
         {
             string file;
-
             if (args.Length >= 1)
                 file = args[0];
             else
             {
-                Console.Write("\nsource file:  ");
+                Console.Write("Source file: ");
                 file = Console.ReadLine();
             }
             try
             {
-                Read(file);
                 (int errors, ParentNode program) = Compiler.Compile(file);
                 CodeGenerator codeGenerator = new CodeGenerator(file);
 
                 if (errors > 0)
                     return errors;
 
-                if(program is null)
-                {
+                if (program is null)
                     throw new Exception("There's no program to run!");
-                }
+
                 RootNode rootNode = GetRootNode(program);
                 rootNode.Accept(codeGenerator);
             }
