@@ -70,4 +70,4 @@ String        \"(\\.|[^"\n\\])*\"
 {RealNumber}  { yylval.val=yytext; return (int)Tokens.RealNumber; }
 {String}      { yylval.val=yytext; return (int)Tokens.String; }
 {Comment}     { }
-.             { yyerror("Wrong token: " + yytext + "k"); return (int)Tokens.Error; }
+.             { yyerror("Wrong token: " + yytext + "k"); return (int)Tokens.error; }

@@ -157,7 +157,7 @@ namespace MiNI_Language
 
             ParentNode lvl1 = new ParentNode(true);
             lvl1.AddChild(new Instruction(".entrypoint"));
-            lvl1.AddChild(new Instruction(".maxstack 256"));
+            lvl1.AddChild(new Instruction(".maxstack 64"));
             lvl1.AddChild(new Instruction(".try"));
 
             program.AddChild(new Instruction("leave EndMain"));

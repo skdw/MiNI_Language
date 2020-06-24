@@ -47,7 +47,6 @@ public Node node;
 %token Assignment LogicalOr LogicalAnd BitwiseOr BitwiseAnd Equality Inequality Greater GreaterOrEqual Less LessOrEqual
 %token Addition Subtraction Multiplication Division LogicalNegation BitwiseNegation LeftBracket RightBracket LeftCurlyBracket RightCurlyBracket Semicolon
 
-%token Eof Error
 %token <val> Ident IntNumber RealNumber String
 
 %type <node> block instrs declars instr declar
@@ -91,6 +90,8 @@ instrs    : instrs instr
                { $1.AddChild($2); }
           |    
 	       { $$ = new ParentNode(); }
+	  | EOF
+	       { GenError("Unexpected EOF"); YYAbort(); }
           ;
 
 instr     : LeftCurlyBracket instrs RightCurlyBracket 
@@ -109,6 +110,8 @@ instr     : LeftCurlyBracket instrs RightCurlyBracket
 	       { }
 	  | return 
 	       { }
+	  | error Semicolon
+	       { yyerrok(); }
           ;
 
 ifelse    : If LeftBracket expr RightBracket instr Else instr 
@@ -175,7 +178,6 @@ read      : Read stident Semicolon
 	       default:
 	           break;
 	       }
-
 	       res.AddChild($2);
 	       $$ = res;
 	       } // zapisuje do zmiennej, nie zmienia stosu
@@ -456,10 +458,7 @@ stident   : Ident
                {
 	       int index = declarations.FindIndex(var => var.Item2 == String.Format("{0}", $1));
 	       if(index == -1)
-	       {
 	           GenError(String.Format("Cannot access an undeclared variable: {0}", $1));
-		   YYAccept(); // ????????
-	       }
 	       $$ = new Instruction(String.Format("stloc {0}", index), declarations[index].Item1);
 	       }
 	  ; // pobieramy wartosc ze stosu i umieszczamy w zmiennej
@@ -468,10 +467,7 @@ ldident   : Ident
                {
 	       int index = declarations.FindIndex(var => var.Item2 == String.Format("{0}", $1));
 	       if(index == -1)
-	       {
 	           GenError(String.Format("Cannot put value to an undeclared variable: {0}", $1));
-		   YYAccept(); // ????????
-	       }
 	       $$ = new Instruction(String.Format("ldloc {0}", index), declarations[index].Item1);
 	       }
 	  ; // wrzucamy wartosc zmiennej na stos
